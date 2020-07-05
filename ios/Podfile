@@ -81,6 +81,8 @@ target 'tccapp' do
 
   pod 'react-native-webview', :path => '../node_modules/react-native-webview'
 
+  pod 'react-native-photo-manipulator', :path => '../node_modules/react-native-photo-manipulator'
+
   target 'tccappTests' do
     inherit! :complete
     # Pods for testing

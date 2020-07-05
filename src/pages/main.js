@@ -1,11 +1,11 @@
 import React, {Component} from 'react';
-import { AppRegistry, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, ImageBackground } from 'react-native';
+import { Image, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, ImageBackground } from 'react-native';
 import { RNCamera } from 'react-native-camera';
 import Gestures from 'react-native-easy-gestures';
 import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
-
-
+import RNPhotoManipulator from 'react-native-photo-manipulator';
+import RNFetchBlob from 'react-native-fetch-blob'
 
 
 export default class Main extends Component{
@@ -13,7 +13,17 @@ export default class Main extends Component{
         super(props)
         this.state = {
           view: 'start',
-          photoData: null
+          photoData: null, 
+          canvas: null,
+          text:"Po",
+          canvasB:{
+            width: 100,
+            height: 100
+          },
+          canvasA: {
+            width: 100,
+            height: 100
+          }
         }
      }
 
@@ -25,26 +35,80 @@ export default class Main extends Component{
             console.log('Y offset to frame: ' + fy)
             console.log('X offset to page: ' + px)
             console.log('Y offset to page: ' + py)
-            uri = this.state.photoData;
-            console.log(uri);
-            cropData = {
-                offset: {x: px, y: py},
-                size: {width: width, height: height},
-            };
-            ImageEditor.cropImage(uri, cropData).then(url => {
-                console.log("Cropped image uri", url);
+            RNFetchBlob.fs.readFile(this.state.photoData, 'base64')
+            .then((data) => {
+                //const image = "data:image/jpeg;base64,"+data;
+                this.mountCanvas(data,px,py,width,height);
+                /*var cropData = {
+                    offset: {x: px, y: py},
+                    size: {width: width, height: height},
+                };
+                ImageEditor.cropImage(image, cropData).then(url => {
+                    console.log("Cropped image uri", url);
+                })*/
+                /*const cropRegion = { x: px, y: py, size: height, width: width };
+                const targetSize = { size: height, width: width };
+                RNPhotoManipulator.crop(image, cropRegion, targetSize).then(path => {
+                    console.log(`Result image path: ${path}`);
+                    this.mountCanvas(data);
+                });*/
             })
+            //var uri = this.state.photoData;
+            //var cropData = {
+            //    offset: {x: px, y: py},
+            //    size: {width: width, height: height},
+            //};
+            //ImageEditor.cropImage(uri, cropData).then(url => {
+            //    console.log("Cropped image uri", url);
+            //})
         });
     };
 
+    saveCanvas = () =>{
+        const canvasSave = this.state.canvasB;
+        canvasSave.toDataURL('image/png').then((d)=>
+            this.setState({image:d}, () =>{
+
+                const image = new CanvasImage(this.state.canvasA);
+                image.crossOrigin = '*';
+
+                const context = this.state.canvasA.getContext('2d');
+                image.src = d;
+                context.drawImage(image, 0, 0, 100, 100);
+            })
+        );
+    }
+
+    mountCanvas = (data,x,y,height,width) =>{
+        const image = new CanvasImage(this.state.canvasB);
+        image.crossOrigin = '*';
+        
+        const context = this.state.canvasB.getContext('2d');
+
+        image.src = "data:image/jpeg;base64,"+data;
+
+        //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
+        console.log(image);
+        image.addEventListener('load', () => {
+            debugger
+            console.log('image is loaded');
+            context.drawImage(image, x, y, width, height,0,0,width,height);
+
+            //context.globalCompositeOperation='difference';
+            //context.fillStyle='white';
+            //context.fillRect(0,0,100,100);
+        }); 
+    }
+
     handleCanvas =  (canvas) => {
         const image = new CanvasImage(canvas);
+        image.crossOrigin = '*';
         canvas.width = 100;
         canvas.height = 100;
         
         const context = canvas.getContext('2d');
 
-        image.src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx112748-TkfRFNCgQFQX.jpg';
+        image.src = 'https://4.bp.blogspot.com/-znfmwJ_BRao/Two2Df7EEhI/AAAAAAAAB6s/JR4FXeKPIFo/s1600/ai.jpg';
 
         //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
 
@@ -52,16 +116,29 @@ export default class Main extends Component{
             debugger
             console.log('image is loaded');
             context.drawImage(image, 0, 0, 100, 100);
+
+            context.globalCompositeOperation='difference';
+            context.fillStyle='white';
+            context.fillRect(0,0,100,100);
         }); 
+        this.setState({canvas:canvas});
     }
     
     render() {
         if(this.state.view=='start'){
+            if(this.state.image!=null){
+                var imageCanvas = this.state.image;
+                console.log(imageCanvas);
+            }else{
+                var imageCanvas = null;
+            }
             return(
                 <View>
                     <Button onPress={() =>this.openCamera()}
                             title="Usar Câmera"/>
-                    <Canvas ref={this.handleCanvas}/>
+                    <Button onPress={() =>this.saveCanvas()}
+                            title="Save Canvas"/>
+                    <Canvas ref={canvasA => this.state.canvasA = canvasA} />          
                 </View>
             );
         }else if(this.state.view=='camera'){
@@ -97,6 +174,10 @@ export default class Main extends Component{
                     <ImageBackground
                     style={styles.image}
                     source={{uri:this.state.photoData}}>
+                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
+                            <Canvas style={{flex:1}} ref={canvasB => this.state.canvasB = canvasB} />
+                            <Text>{this.state.Text}</Text>
+                        </View>
                         <Gestures
                         rotatable={false}
                         
@@ -127,10 +208,11 @@ export default class Main extends Component{
     
       takePicture = async () => {
         if (this.camera) {
-          const options = { quality: 0.5, base64: true };
-          const data = await this.camera.takePictureAsync(options);
+          const options = { quality: 0.9, base64: true };
+          const data = await this.camera.takePictureAsync(options)
           this.setState({view:'image',photoData:data.uri})
           console.log(data.uri);
+          //this.mountCanvas();
         }
       };
 
@@ -150,6 +232,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         zIndex:0
     },
+    imagetest:{
+        width:100,
+        height:100,
+        backgroundColor:'red'
+    },  
     container: {
       flex: 1,
       flexDirection: 'column',
