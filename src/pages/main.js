@@ -1,5 +1,5 @@
 import React, {Component} from 'react';
-import { Image, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, ImageBackground } from 'react-native';
+import { Image, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, Dimensions, ImageBackground, SafeAreaView, ScrollView } from 'react-native';
 import { RNCamera } from 'react-native-camera';
 import Gestures from 'react-native-easy-gestures';
 import ImageEditor from "@react-native-community/image-editor";
@@ -35,10 +35,11 @@ export default class Main extends Component{
             console.log('Y offset to frame: ' + fy)
             console.log('X offset to page: ' + px)
             console.log('Y offset to page: ' + py)
-            RNFetchBlob.fs.readFile(this.state.photoData, 'base64')
-            .then((data) => {
+            this.mountCanvas(this.state.photoData,px,py,width,height);
+            //RNFetchBlob.fs.readFile(this.state.photoData, 'base64')
+            //.then((data) => {
                 //const image = "data:image/jpeg;base64,"+data;
-                this.mountCanvas(data,px,py,width,height);
+                //this.mountCanvas(data,px,py,width,height);
                 /*var cropData = {
                     offset: {x: px, y: py},
                     size: {width: width, height: height},
@@ -52,7 +53,7 @@ export default class Main extends Component{
                     console.log(`Result image path: ${path}`);
                     this.mountCanvas(data);
                 });*/
-            })
+            //})
             //var uri = this.state.photoData;
             //var cropData = {
             //    offset: {x: px, y: py},
@@ -84,19 +85,20 @@ export default class Main extends Component{
         image.crossOrigin = '*';
         
         const context = this.state.canvasB.getContext('2d');
-
-        image.src = "data:image/jpeg;base64,"+data;
+        context.clearRect(0, 0, width, height);
+        image.src = data;
+        //image.src = "data:image/jpeg;base64,"+data;
 
         //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
-        console.log(image);
         image.addEventListener('load', () => {
             debugger
             console.log('image is loaded');
-            context.drawImage(image, x, y, width, height,0,0,width,height);
+            context.clearRect(10, 10, 100, 100);
+            context.drawImage(image, x*5, y*4.7, width*5, height*5,0,0,width,height);
 
-            //context.globalCompositeOperation='difference';
-            //context.fillStyle='white';
-            //context.fillRect(0,0,100,100);
+            context.globalCompositeOperation='difference';
+            context.fillStyle='white';
+            context.fillRect(0,0,100,100);
         }); 
     }
 
@@ -136,14 +138,12 @@ export default class Main extends Component{
                 <View>
                     <Button onPress={() =>this.openCamera()}
                             title="Usar Câmera"/>
-                    <Button onPress={() =>this.saveCanvas()}
-                            title="Save Canvas"/>
-                    <Canvas ref={canvasA => this.state.canvasA = canvasA} />          
                 </View>
             );
         }else if(this.state.view=='camera'){
             return (
             <View style={styles.container}>
+                <Canvas style={{display:'none'}} ref={canvasA => this.state.canvasA = canvasA} />
                 <RNCamera
                 ref={(ref) => {
                     this.camera = ref;
@@ -171,25 +171,20 @@ export default class Main extends Component{
         }else if(this.state.view=='image'){
             return (
                 <View style={styles.container}>
-                    <ImageBackground
-                    style={styles.image}
-                    source={{uri:this.state.photoData}}>
-                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
-                            <Canvas style={{flex:1}} ref={canvasB => this.state.canvasB = canvasB} />
-                            <Text>{this.state.Text}</Text>
-                        </View>
-                        <Gestures
+                    <Image style={styles.image} source={{uri:this.state.photoData}} />
+                    <Gestures
                         rotatable={false}
                         
                         >
-                        <TouchableHighlight onPress={ () =>{
-                            this.cropImage()
+                        <TouchableHighlight onPress={ (evt) =>{
+                            this.cropImage(evt)
                         }}>
                         <View
                             style={{
                             width: 50,
                             height: 50,
                             backgroundColor: "#5BD2D2",
+                            position: 'relative',
                             opacity: 0.5,
                             zIndex: 10
                             }}
@@ -197,7 +192,11 @@ export default class Main extends Component{
                         />
                         </TouchableHighlight>
                         </Gestures>
-                    </ImageBackground>
+                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
+                            <Canvas style={{flex:1}} ref={canvasB => this.state.canvasB = canvasB} />
+                            <Text>{this.state.Text}</Text>
+                        </View>
+                    
                     <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
                         <Text style={{ fontSize: 14 }}> Cancelar </Text>
                     </TouchableOpacity>
@@ -208,10 +207,15 @@ export default class Main extends Component{
     
       takePicture = async () => {
         if (this.camera) {
-          const options = { quality: 0.9, base64: true };
+          const options = { quality: 1, base64: true };
           const data = await this.camera.takePictureAsync(options)
-          this.setState({view:'image',photoData:data.uri})
-          console.log(data.uri);
+          RNFetchBlob.fs.readFile(data.uri, 'base64')
+            .then((data) => {
+                var data = "data:image/jpeg;base64,"+data;
+                this.setState({view:'image',photoData:data});
+                console.log(data.uri);
+            });
+          
           //this.mountCanvas();
         }
       };
@@ -228,8 +232,10 @@ export default class Main extends Component{
 const styles = StyleSheet.create({
     image:{
         flex:1,
+        flexGrow: 1,
         justifyContent: 'flex-end',
         alignItems: 'center',
+        resizeMode: 'stretch',
         zIndex:0
     },
     imagetest:{
@@ -238,13 +244,17 @@ const styles = StyleSheet.create({
         backgroundColor:'red'
     },  
     container: {
-      flex: 1,
+      flex: 0,
       flexDirection: 'column',
       backgroundColor: 'black',
+      borderWidth:1,
+      width:'100%',
+      flexGrow: 1,
     },
     preview: {
       flex: 1,
       justifyContent: 'flex-end',
+      width:'100%',
       alignItems: 'center',
     },
     capture: {
