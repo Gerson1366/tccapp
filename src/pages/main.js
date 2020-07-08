@@ -1,6 +1,6 @@
 import React, {Component} from 'react';
 import { Image, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, Dimensions, ImageBackground, SafeAreaView, ScrollView } from 'react-native';
-import { RNCamera } from 'react-native-camera';
+import { Camera } from 'expo-camera';
 import Gestures from 'react-native-easy-gestures';
 import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
@@ -145,13 +145,13 @@ export default class Main extends Component{
             return (
             <View style={styles.container}>
                 <Canvas style={{display:'none'}} ref={canvasA => this.state.canvasA = canvasA} />
-                <RNCamera
+                <Camera
                 ref={(ref) => {
                     this.camera = ref;
                 }}
                 style={styles.preview}
-                type={RNCamera.Constants.Type.back}
-                //flashMode={RNCamera.Constants.FlashMode.on}
+                type={Camera.Constants.Type.back}
+                //flashMode={Camera.Constants.FlashMode.on}
                 androidCameraPermissionOptions={{
                     title: 'Permission to use camera',
                     message: 'We need your permission to use your camera',
