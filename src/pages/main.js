@@ -6,6 +6,7 @@ import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
 import RNPhotoManipulator from 'react-native-photo-manipulator';
 import RNFetchBlob from 'react-native-fetch-blob';
+import * as tf from '@tensorflow/tfjs'
 
 
 
@@ -24,9 +25,20 @@ export default class Main extends Component{
           canvasA: {
             width: 100,
             height: 100
-          }
+          },
+          isTfReady: false
         }
      }
+
+     async componentDidMount() {
+        await tf.ready()
+        this.setState({
+          isTfReady: true
+        })
+    
+        //Output in Expo console
+        console.log(this.state.isTfReady)
+      }
 
     cropImage = () => {
         this.captureComponent.measure( (fx, fy, width, height, px, py) => {

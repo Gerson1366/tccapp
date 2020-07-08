@@ -10,10 +10,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@react-native-community/async-storage": "^1.11.0",
     "@react-native-community/image-editor": "^2.3.0",
     "@react-native-community/masked-view": "^0.1.10",
     "@react-navigation/drawer": "^5.8.2",
     "@react-navigation/native": "^5.5.1",
+    "@tensorflow/tfjs": "^2.0.1",
+    "@tensorflow/tfjs-react-native": "^0.3.0",
     "expo-camera": "^8.3.1",
     "expo-gl": "^8.3.1",
     "expo-gl-cpp": "^8.3.1",

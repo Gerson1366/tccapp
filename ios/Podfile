@@ -83,6 +83,8 @@ target 'tccapp' do
 
   pod 'react-native-photo-manipulator', :path => '../node_modules/react-native-photo-manipulator'
 
+  pod 'RNCAsyncStorage', :path => '../node_modules/@react-native-community/async-storage'
+
   target 'tccappTests' do
     inherit! :complete
     # Pods for testing
