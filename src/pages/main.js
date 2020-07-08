@@ -5,7 +5,8 @@ import Gestures from 'react-native-easy-gestures';
 import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
 import RNPhotoManipulator from 'react-native-photo-manipulator';
-import RNFetchBlob from 'react-native-fetch-blob'
+import RNFetchBlob from 'react-native-fetch-blob';
+
 
 
 export default class Main extends Component{
