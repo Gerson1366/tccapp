@@ -6,13 +6,23 @@ import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
 import RNPhotoManipulator from 'react-native-photo-manipulator';
 import RNFetchBlob from 'react-native-fetch-blob';
+import * as FileSystem from 'expo-file-system';
 import * as tf from '@tensorflow/tfjs';
 import RNFS from 'react-native-fs';
 import {loadGraphModel} from '@tensorflow/tfjs-converter';
-import {bundleResourceIO, fetch, decodeJpeg} from '@tensorflow/tfjs-react-native';
+import {bundleResourceIO} from '@tensorflow/tfjs-react-native';
 import * as jpeg from 'jpeg-js'
 
+class MyInit extends tf.initializers.randomNormal{
+    static className = "myInit";
+    constructor(config) {
+        super(config);
+        this.mean = 0.0;
+        this.stddev = 0.05;
+    }
+}
 
+tf.serialization.registerClass(MyInit);
 
 export default class Main extends Component{
 
@@ -34,6 +44,7 @@ export default class Main extends Component{
           },
           isTfReady: false,
           isModelReady: false,
+          model: null,
           canvasData: null,
           predictions: null,
           image: null
@@ -53,12 +64,17 @@ export default class Main extends Component{
         //const modelJson = require('https://www.inajunkbox.com.br/model_json/model.json');
         //const modelWeights = require('https://www.inajunkbox.com.br/model_json/group1-shard1of1.bin');
         const modelJson = require('../assets/model.json/');
-        //const modelWeights = require('../assets/group1-shard1of1.bin');
-        //const model = tf.loadGraphModel(bundleResourceIO(modelJson, modelWeights));
-        const model = tf.loadGraphModel(modelJson);
-        this.setState({ isModelReady: true })
-        console.log(this.state.isModelReady);
-        console.log(model.modelVersion);
+        const modelWeights = require('../assets/group1-shard1of1.bin/');
+        //console.log(modelJson);
+        tf.loadLayersModel(bundleResourceIO(modelJson, modelWeights)).then(model => {
+            this.setState({ isModelReady: true, model:model });
+        });
+        //console.log((await model).summary());
+        //model.summary();
+        //const model = tf.loadGraphModel(modelJson);
+        
+        //console.log(this.state.isModelReady);
+        //model.summary();
       }
 
       imageToTensor(rawImageData) {
@@ -75,19 +91,28 @@ export default class Main extends Component{
           offset += 4
         }
     
-        return tf.tensor3d(buffer, [height, width, 3])
+        return tf.tensor4d(buffer, [1,height, width, 1])
       }
 
       classifyImage = async () => {
         try {
-          const image = '/data/user/0/com.tccapp/files/image.jpeg';
-            const imageAssetPath = Image.resolveAssetSource(image);
-            const response = await fetch(imageAssetPath, {}, { isBinary: true });
-            const rawImageData = await response.arrayBuffer();
-            const imageTensor = decodeJpeg(rawImageData);
-          //const predictions = await this.model.classify(imageTensor)
-          //this.setState({ predictions })
-          //console.log(predictions)
+            const imageAssetPath = Image.resolveAssetSource(this.state.image)
+            console.log(imageAssetPath.uri);
+            const imgB64 = await FileSystem.readAsStringAsync(imageAssetPath.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
+            const raw = new Uint8Array(imgBuffer)
+            const imageTensor = this.imageToTensor(raw);
+            console.log('imageTensor: ', imageTensor);
+            //console.log((await this.state.model).summary());
+            //console.log(this.state.model);
+            const predictions = await this.state.model.predict(imageTensor);
+
+            //this.setState({ predictions: predictions })
+
+
+            //console.log('----------- predictions: ', predictions);
         } catch (error) {
           console.log(error)
         }
@@ -102,32 +127,6 @@ export default class Main extends Component{
             console.log('X offset to page: ' + px)
             console.log('Y offset to page: ' + py)
             this.mountCanvas(this.state.photoData,px,py,width,height);
-            //RNFetchBlob.fs.readFile(this.state.photoData, 'base64')
-            //.then((data) => {
-                //const image = "data:image/jpeg;base64,"+data;
-                //this.mountCanvas(data,px,py,width,height);
-                /*var cropData = {
-                    offset: {x: px, y: py},
-                    size: {width: width, height: height},
-                };
-                ImageEditor.cropImage(image, cropData).then(url => {
-                    console.log("Cropped image uri", url);
-                })*/
-                /*const cropRegion = { x: px, y: py, size: height, width: width };
-                const targetSize = { size: height, width: width };
-                RNPhotoManipulator.crop(image, cropRegion, targetSize).then(path => {
-                    console.log(`Result image path: ${path}`);
-                    this.mountCanvas(data);
-                });*/
-            //})
-            //var uri = this.state.photoData;
-            //var cropData = {
-            //    offset: {x: px, y: py},
-            //    size: {width: width, height: height},
-            //};
-            //ImageEditor.cropImage(uri, cropData).then(url => {
-            //    console.log("Cropped image uri", url);
-            //})
         });
     };
 
@@ -158,7 +157,7 @@ export default class Main extends Component{
             RNFS.writeFile(imagePath, base64Data, 'base64')
                 .then(() =>{
                 console.log('Image converted to jpg and saved at ' + imagePath);
-                var uriImage = 'file://' + imagePath;
+                var uriImage = {uri: 'file://'+imagePath};
                 console.log(uriImage);
                 this.setState({ image: uriImage  }, () =>{
                     this.classifyImage();
