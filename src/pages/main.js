@@ -1,43 +1,96 @@
 import React, {Component} from 'react';
-import { Image, Button, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, Dimensions, ImageBackground, SafeAreaView, ScrollView } from 'react-native';
+import { Image, Button, StyleSheet, Text,PermissionsAndroid, TouchableOpacity, TouchableHighlight, View, Dimensions, ImageBackground, SafeAreaView, ScrollView } from 'react-native';
 import { Camera } from 'expo-camera';
 import Gestures from 'react-native-easy-gestures';
 import ImageEditor from "@react-native-community/image-editor";
 import Canvas, {Image as CanvasImage} from 'react-native-canvas';
 import RNPhotoManipulator from 'react-native-photo-manipulator';
 import RNFetchBlob from 'react-native-fetch-blob';
-import * as tf from '@tensorflow/tfjs'
+import * as tf from '@tensorflow/tfjs';
+import RNFS from 'react-native-fs';
+import {loadGraphModel} from '@tensorflow/tfjs-converter';
+import {bundleResourceIO, fetch, decodeJpeg} from '@tensorflow/tfjs-react-native';
+import * as jpeg from 'jpeg-js'
 
 
 
 export default class Main extends Component{
+
+    canvas; 
+
     constructor (props) {
         super(props)
+        this.canvasB;
         this.state = {
           view: 'start',
           photoData: null, 
           canvas: null,
           text:"Po",
-          canvasB:{
-            width: 100,
-            height: 100
-          },
+          canvasB:{width: 32,
+            height: 32},
           canvasA: {
-            width: 100,
-            height: 100
+            width: 32,
+            height: 32
           },
-          isTfReady: false
+          isTfReady: false,
+          isModelReady: false,
+          canvasData: null,
+          predictions: null,
+          image: null
         }
      }
 
      async componentDidMount() {
+        PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE)
+        PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE)
         await tf.ready()
         this.setState({
           isTfReady: true
         })
     
         //Output in Expo console
-        console.log(this.state.isTfReady)
+        //console.log(this.state.isTfReady)
+        //const modelJson = require('https://www.inajunkbox.com.br/model_json/model.json');
+        //const modelWeights = require('https://www.inajunkbox.com.br/model_json/group1-shard1of1.bin');
+        const modelJson = require('../assets/model.json/');
+        //const modelWeights = require('../assets/group1-shard1of1.bin');
+        //const model = tf.loadGraphModel(bundleResourceIO(modelJson, modelWeights));
+        const model = tf.loadGraphModel(modelJson);
+        this.setState({ isModelReady: true })
+        console.log(this.state.isModelReady);
+        console.log(model.modelVersion);
+      }
+
+      imageToTensor(rawImageData) {
+        const TO_UINT8ARRAY = true
+        const { width, height, data } = jpeg.decode(rawImageData, TO_UINT8ARRAY)
+        // Drop the alpha channel info for mobilenet
+        const buffer = new Uint8Array(width * height * 3)
+        let offset = 0 // offset into original data
+        for (let i = 0; i < buffer.length; i += 3) {
+          buffer[i] = data[offset]
+          buffer[i + 1] = data[offset + 1]
+          buffer[i + 2] = data[offset + 2]
+    
+          offset += 4
+        }
+    
+        return tf.tensor3d(buffer, [height, width, 3])
+      }
+
+      classifyImage = async () => {
+        try {
+          const image = '/data/user/0/com.tccapp/files/image.jpeg';
+            const imageAssetPath = Image.resolveAssetSource(image);
+            const response = await fetch(imageAssetPath, {}, { isBinary: true });
+            const rawImageData = await response.arrayBuffer();
+            const imageTensor = decodeJpeg(rawImageData);
+          //const predictions = await this.model.classify(imageTensor)
+          //this.setState({ predictions })
+          //console.log(predictions)
+        } catch (error) {
+          console.log(error)
+        }
       }
 
     cropImage = () => {
@@ -88,55 +141,78 @@ export default class Main extends Component{
 
                 const context = this.state.canvasA.getContext('2d');
                 image.src = d;
-                context.drawImage(image, 0, 0, 100, 100);
+                context.drawImage(image, 0, 0, 32, 32);
             })
         );
     }
 
+    predictImage = () =>{
+        var canvas = this.state.canvasB;
+        console.log(canvas.width);
+        canvas.toDataURL('image/jpeg').then((d)=>{
+            console.log(d);
+            const imageData = d;
+            //const imagePath = RNFS.ExternalDirectoryPath + '/image.jpeg';
+            const imagePath = RNFS.DocumentDirectoryPath + '/image.jpeg';
+            const base64Data = imageData.split('base64,')[1];
+            RNFS.writeFile(imagePath, base64Data, 'base64')
+                .then(() =>{
+                console.log('Image converted to jpg and saved at ' + imagePath);
+                var uriImage = 'file://' + imagePath;
+                console.log(uriImage);
+                this.setState({ image: uriImage  }, () =>{
+                    this.classifyImage();
+                });
+                /*var cropData = {
+                    offset: {x: 0, y: 0},
+                    size: {width: 32, height: 32}
+                };
+                ImageEditor.cropImage(
+                    uriImage,
+                    cropData,
+                    (croppedImageURI) => {
+                        console.log('succes', croppedImageURI);
+                    },
+                    (cropError) => {
+                        console.log('fail', cropError);
+                    }
+                );*/
+            });
+        })
+    }
+
     mountCanvas = (data,x,y,height,width) =>{
-        const image = new CanvasImage(this.state.canvasB);
-        image.crossOrigin = '*';
+        var canvas = this.state.canvasB;
+        const image = new CanvasImage(canvas);
         
-        const context = this.state.canvasB.getContext('2d');
-        context.clearRect(0, 0, width, height);
+        canvas.width = 32;
+        canvas.height = 32;
+        this.setState({canvasB:canvas});
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, 32, 32);
         image.src = data;
         //image.src = "data:image/jpeg;base64,"+data;
-
         //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
         image.addEventListener('load', () => {
             debugger
             console.log('image is loaded');
-            context.clearRect(10, 10, 100, 100);
-            context.drawImage(image, x*5, y*4.7, width*5, height*5,0,0,width,height);
+            context.clearRect(10, 10, 32, 32);
+            context.drawImage(image, x*5, y*5, width*5, height*5,0,0,32,32);
 
             context.globalCompositeOperation='difference';
             context.fillStyle='white';
-            context.fillRect(0,0,100,100);
+            context.fillRect(0,0,32,32);
+
+            this.predictImage();
         }); 
+        
     }
 
     handleCanvas =  (canvas) => {
-        const image = new CanvasImage(canvas);
-        image.crossOrigin = '*';
-        canvas.width = 100;
-        canvas.height = 100;
-        
-        const context = canvas.getContext('2d');
-
-        image.src = 'https://4.bp.blogspot.com/-znfmwJ_BRao/Two2Df7EEhI/AAAAAAAAB6s/JR4FXeKPIFo/s1600/ai.jpg';
-
-        //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
-
-        image.addEventListener('load', () => {
-            debugger
-            console.log('image is loaded');
-            context.drawImage(image, 0, 0, 100, 100);
-
-            context.globalCompositeOperation='difference';
-            context.fillStyle='white';
-            context.fillRect(0,0,100,100);
-        }); 
-        this.setState({canvas:canvas});
+        this.canvasB = new CanvasImage(canvas);
+        this.canvasB.crossOrigin = '*';
+        this.canvasB.width = 32;
+        this.canvasB.height = 32;
     }
     
     render() {
@@ -156,7 +232,6 @@ export default class Main extends Component{
         }else if(this.state.view=='camera'){
             return (
             <View style={styles.container}>
-                <Canvas style={{display:'none'}} ref={canvasA => this.state.canvasA = canvasA} />
                 <Camera
                 ref={(ref) => {
                     this.camera = ref;
@@ -206,8 +281,7 @@ export default class Main extends Component{
                         </TouchableHighlight>
                         </Gestures>
                         <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
-                            <Canvas style={{flex:1}} ref={canvasB => this.state.canvasB = canvasB} />
-                            <Text>{this.state.Text}</Text>
+                            <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} width={32} height={32} />
                         </View>
                     
                     <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
@@ -256,6 +330,11 @@ const styles = StyleSheet.create({
         height:100,
         backgroundColor:'red'
     },  
+    canvas:{
+        width:32,
+        height:32,
+        backgroundColor:'red'
+    },
     container: {
       flex: 0,
       flexDirection: 'column',
