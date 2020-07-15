@@ -8,6 +8,7 @@ import org.unimodules.adapters.react.ReactModuleRegistryProvider;
 import org.unimodules.core.interfaces.SingletonModule;
 import com.facebook.react.PackageList;
 import com.facebook.react.ReactApplication;
+import com.imagepicker.ImagePickerPackage;
 import com.reactnativecommunity.asyncstorage.AsyncStoragePackage;
 import com.guhungry.rnphotomanipulator.RNPhotoManipulatorPackage;
 import com.reactnativecommunity.webview.RNCWebViewPackage;

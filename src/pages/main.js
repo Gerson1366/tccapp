@@ -10,8 +10,15 @@ import * as FileSystem from 'expo-file-system';
 import * as tf from '@tensorflow/tfjs';
 import RNFS from 'react-native-fs';
 import {loadGraphModel} from '@tensorflow/tfjs-converter';
-import {bundleResourceIO} from '@tensorflow/tfjs-react-native';
-import * as jpeg from 'jpeg-js'
+import {fetch, decodeJpeg, bundleResourceIO} from '@tensorflow/tfjs-react-native';
+import * as jpeg from 'jpeg-js';
+import * as ImageManipulator from "expo-image-manipulator";
+import Database from '../database';
+import Encoding from 'encoding-japanese';
+import ImagePicker from 'react-native-image-picker';
+import translate from 'google-translate-open-api';
+
+const db = new Database();
 
 class MyInit extends tf.initializers.randomNormal{
     static className = "myInit";
@@ -34,7 +41,18 @@ export default class Main extends Component{
         this.state = {
           view: 'start',
           photoData: null, 
+          photoSizes:{
+              width:null,
+              height:null
+          },
+          imageSizes:{
+              width:null,
+              height:null,
+              x:null,
+              y:null
+          },
           canvas: null,
+          charCollection: [],
           text:"Po",
           canvasB:{width: 32,
             height: 32},
@@ -47,7 +65,10 @@ export default class Main extends Component{
           model: null,
           canvasData: null,
           predictions: null,
-          image: null
+          image: null,
+          kanjiString: "",
+          format:null,
+          translation:""
         }
      }
 
@@ -80,18 +101,42 @@ export default class Main extends Component{
       imageToTensor(rawImageData) {
         const TO_UINT8ARRAY = true
         const { width, height, data } = jpeg.decode(rawImageData, TO_UINT8ARRAY)
+        //console.log(data);
         // Drop the alpha channel info for mobilenet
-        const buffer = new Uint8Array(width * height * 3)
+        const buffer = new Uint8Array(width * height * 1)
         let offset = 0 // offset into original data
-        for (let i = 0; i < buffer.length; i += 3) {
-          buffer[i] = data[offset]
-          buffer[i + 1] = data[offset + 1]
-          buffer[i + 2] = data[offset + 2]
-    
+        let pixel;
+        var contrast = (20/100) + 1; //porcentagem de contraste
+        //console.log("Contraste: ",contrast);
+        var intercept = 128 * (1 - contrast);
+        for (let i = 0; i < buffer.length; i += 1) {
+          //console.log(offset);
+          //pixel = (data[offset]*contrast+intercept)+(data[offset+1]*contrast+intercept)+(data[offset+2]*contrast+intercept)
+          
+          //buffer[i] = (pixel/3)/255
+          //pixel = 0
+          //buffer[i] = data[offset+2]/255
+          pixel = (((data[offset] + data[offset + 1] + data[offset + 2])/3)+100);
+          /*if((pixel/3)<100){
+              pixel = 0
+          }else{
+              pixel = 1
+          }*/
+          //console.log(pixel/255)
+          buffer[i]=(pixel/255)
           offset += 4
         }
-    
-        return tf.tensor4d(buffer, [1,height, width, 1])
+        //console.log(buffer);
+        var imgTensor = tf.tensor3d(buffer, [ height, width, 1])
+        
+        imgTensor = tf.image.resizeBilinear(imgTensor, [32, 32]).toFloat();
+        //imgTensor = tf.scalar(1.0).sub(imgTensor.div(offset));
+        //const offset2 = tf.scalar(255.0);
+        //imgTensor = imgTensor.sub(offset2).div(offset2);
+        imgTensor = imgTensor.expandDims(0);
+        //imgTensor = tf.cast(imgTensor,"float32");
+        return imgTensor;
+        //return tf.reshape(floatImage,[1,32,32,1])
       }
 
       classifyImage = async () => {
@@ -101,31 +146,63 @@ export default class Main extends Component{
             const imgB64 = await FileSystem.readAsStringAsync(imageAssetPath.uri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
+            //console.log('imgB64: ',imgB64);
             const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
             const raw = new Uint8Array(imgBuffer)
+            //console.log('raw: ',raw);
+            //console.log('imgBuffer: ',imgBuffer);
             const imageTensor = this.imageToTensor(raw);
-            console.log('imageTensor: ', imageTensor);
-            //console.log((await this.state.model).summary());
-            //console.log(this.state.model);
-            const predictions = await this.state.model.predict(imageTensor);
-
+            //const imageRaw = decodeJpeg(raw);
+            //const imageFloat = tf.cast(imageRaw,"float32");
+            //const imageTensor = tf.reshape(imageFloat,[1,32,32,1]);
+            //console.log('imageTensor: ', imageFloat);
+           // console.log((await this.state.model).summary());
+            //console.log(this.state.model)
+            
+            const predictions = await this.state.model.predict(imageTensor).argMax(1).dataSync();
             //this.setState({ predictions: predictions })
-
-
-            //console.log('----------- predictions: ', predictions);
+            //console.log(this.state.model.getWeights()[0].print());
+            console.log('----------- predictions: ', predictions);
+            //console.log('----------- predictions: ', predictions.argMax(1).dataSync());
+            db.getKanji(predictions[0]).then((data) => {
+                console.log(data);
+                console.log("Data kanji: ",data.character);
+                var kanjiString = this.state.kanjiString;
+                kanjiString = kanjiString+data.character;
+                var charCollection = this.state.charCollection;
+                charCollection.push(data.number);
+                console.log(charCollection);
+                this.setState({kanjiString:kanjiString, charCollection:charCollection});
+                translate(kanjiString, {
+                    tld: "jp",
+                    to: "pt",
+                }).then((data) => {
+                    this.setState({translation:data.data[0]});
+                })
+            }).catch((err) => {
+                console.log(err);
+            });
         } catch (error) {
-          console.log(error)
+          console.log("Erro: ",error)
         }
       }
 
+    addToBase = () =>{
+        db.addConsult(this.state.charCollection);
+        this.setState({kanjiString:"",translation:"",charCollection:[]});
+    }
+
+    removeLast = () =>{
+        var kanjiString = this.state.kanjiString;
+        kanjiString = kanjiString.substring(0,kanjiString.length-1);
+        var charCollection = this.state.charCollection;
+        charCollection.pop();
+        this.setState({kanjiString:kanjiString, charCollection:charCollection});
+    }
+
     cropImage = () => {
         this.captureComponent.measure( (fx, fy, width, height, px, py) => {
-            console.log('Component width is: ' + width)
-            console.log('Component height is: ' + height)
-            console.log('X offset to frame: ' + fx)
-            console.log('Y offset to frame: ' + fy)
-            console.log('X offset to page: ' + px)
-            console.log('Y offset to page: ' + py)
+            console.log("Xget: ",px);
             this.mountCanvas(this.state.photoData,px,py,width,height);
         });
     };
@@ -149,16 +226,17 @@ export default class Main extends Component{
         var canvas = this.state.canvasB;
         console.log(canvas.width);
         canvas.toDataURL('image/jpeg').then((d)=>{
-            console.log(d);
             const imageData = d;
-            //const imagePath = RNFS.ExternalDirectoryPath + '/image.jpeg';
-            const imagePath = RNFS.DocumentDirectoryPath + '/image.jpeg';
+            const imagePath = RNFS.ExternalDirectoryPath + '/image.jpeg';
+            //const imagePath = RNFS.DocumentDirectoryPath + '/image.jpeg';
             const base64Data = imageData.split('base64,')[1];
             RNFS.writeFile(imagePath, base64Data, 'base64')
                 .then(() =>{
                 console.log('Image converted to jpg and saved at ' + imagePath);
+                var imageUri = 'file://'+imagePath;
+                
                 var uriImage = {uri: 'file://'+imagePath};
-                console.log(uriImage);
+                //var uriImage = {uri: 'file:///storage/emulated/0/Android/data/com.tccapp/files/oki.jpg'};
                 this.setState({ image: uriImage  }, () =>{
                     this.classifyImage();
                 });
@@ -180,27 +258,60 @@ export default class Main extends Component{
         })
     }
 
+    getImageSize = (event) =>{
+        this.setState({
+            imageSizes:{
+                width:event.nativeEvent.layout.width,
+                height:event.nativeEvent.layout.height,
+                x:event.nativeEvent.layout.x,
+                y:event.nativeEvent.layout.y
+            }
+        })
+    }
+
     mountCanvas = (data,x,y,height,width) =>{
         var canvas = this.state.canvasB;
         const image = new CanvasImage(canvas);
-        
-        canvas.width = 32;
-        canvas.height = 32;
+        var widthC = 32;
+        var heightC = 32;
+        canvas.width = widthC;
+        canvas.height = heightC;
+        var resizeWidth
+        var resizeHeight
+        var xDelay
+        if(this.state.format==='camera'){
+            resizeWidth = (this.state.photoSizes.width/this.state.imageSizes.width);
+            resizeHeight = (this.state.photoSizes.height/this.state.imageSizes.height);
+        }else{
+            resizeWidth = (this.state.photoSizes.width/this.state.imageSizes.width)*1.5;
+            resizeHeight = (this.state.photoSizes.height/this.state.imageSizes.height);
+            xDelay = 67;
+        }
+        console.log("Resize: ",resizeWidth);
+        console.log("Resize: ",resizeHeight);
+        console.log("X: ",this.state.imageSizes.x)
         this.setState({canvasB:canvas});
         const context = canvas.getContext('2d');
-        context.clearRect(0, 0, 32, 32);
+        context.clearRect(0, 0, widthC, heightC);
         image.src = data;
         //image.src = "data:image/jpeg;base64,"+data;
         //'https://image.freepik.com/free-vector/unicorn-background-design_1324-79.jpg'; Note: with this uri everything works well
         image.addEventListener('load', () => {
             debugger
+            
             console.log('image is loaded');
-            context.clearRect(10, 10, 32, 32);
-            context.drawImage(image, x*5, y*5, width*5, height*5,0,0,32,32);
+            context.clearRect(10, 10, widthC, heightC);
+
+            if(this.state.format==='camera'){
+                context.drawImage(image, x*resizeWidth, y*resizeHeight, width*resizeWidth, height*resizeHeight,0,0,widthC,heightC);
+            }else{
+                console.log("Xposition: ",((x+xDelay)*resizeWidth));
+                context.drawImage(image, ((x-xDelay)*resizeWidth), y*resizeHeight, width*resizeWidth, height*resizeHeight,0,0,widthC,heightC);
+            }
 
             context.globalCompositeOperation='difference';
             context.fillStyle='white';
-            context.fillRect(0,0,32,32);
+            context.fillRect(0,0,widthC,heightC);
 
             this.predictImage();
         }); 
@@ -226,6 +337,8 @@ export default class Main extends Component{
                 <View>
                     <Button onPress={() =>this.openCamera()}
                             title="Usar Câmera"/>
+                    <Button onPress={() =>this.chooseFile()}
+                            title="Enviar Arquivo"/>
                 </View>
             );
         }else if(this.state.view=='camera'){
@@ -246,19 +359,19 @@ export default class Main extends Component{
                 }}
                 />
                 <View style={{ flex: 0, flexDirection: 'row', justifyContent: 'center' }}>
-                <TouchableOpacity onPress={this.takePicture.bind(this)} style={styles.capture}>
-                    <Text style={{ fontSize: 14 }}> Captura </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
-                    <Text style={{ fontSize: 14 }}> Cancelar </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity onPress={this.takePicture.bind(this)} style={styles.capture}>
+                        <Text style={{ fontSize: 14 }}> Captura </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
+                        <Text style={{ fontSize: 14 }}> Cancelar </Text>
+                    </TouchableOpacity>
                 </View>
             </View>
             );
         }else if(this.state.view=='image'){
             return (
                 <View style={styles.container}>
-                    <Image style={styles.image} source={{uri:this.state.photoData}} />
+                    <Image style={styles.image} source={{uri:this.state.photoData}} onLayout={(event) => {this.getImageSize(event)}} />
                     <Gestures
                         rotatable={false}
                         
@@ -280,7 +393,51 @@ export default class Main extends Component{
                         </TouchableHighlight>
                         </Gestures>
                         <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
-                            <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} width={32} height={32} />
+                            <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} />
+                            <Text style={{width:'100%',height:100,backgroundColor:'red'}}>{this.state.kanjiString}</Text>
+                        </View>
+                    
+                    <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
+                        <Text style={{ fontSize: 14 }}> Cancelar </Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }else if(this.state.view=='upload'){
+            return (
+                <View style={styles.container}>
+                    <Image style={styles.imageUpload} source={{uri:this.state.photoData}} onLayout={(event) => {this.getImageSize(event)}} />
+                    <Gestures
+                        rotatable={false}
+                        
+                        >
+                        <TouchableHighlight onPress={ (evt) =>{
+                            this.cropImage(evt)
+                        }}>
+                        <View
+                            style={{
+                            width: 50,
+                            height: 50,
+                            backgroundColor: "#5BD2D2",
+                            position: 'relative',
+                            opacity: 0.5,
+                            zIndex: 10
+                            }}
+                            ref={view => { this.captureComponent = view; }}
+                        />
+                        </TouchableHighlight>
+                        </Gestures>
+                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',flexDirection: 'column',}}>
+                            <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} />
+                            <Text style={{width:'100%'}}>{this.state.kanjiString}</Text>
+                            <Text style={{width:'100%'}}>{this.state.translation}</Text>
+                            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center' }}>
+                                <TouchableOpacity onPress={() => this.removeLast()} style={styles.removeButton}>
+                                    <Text style={{color:'white',textAlign:'center'}}>X</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => this.addToBase()} style={styles.addButton}>
+                                    <Text style={{color:'white',textAlign:'center'}}>✓</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     
                     <TouchableOpacity onPress={() => this.closeCamera()} style={styles.capture}>
@@ -290,16 +447,55 @@ export default class Main extends Component{
             );
         }
       }
+
+      chooseFile = () =>{
+        const options = {
+            title: 'Selecione uma imagem',
+            takePhotoButtonTitle: null,
+            storageOptions: {
+                skipBackup: true,
+                path: 'images',
+            },
+        };
+        ImagePicker.showImagePicker(options, (response) => {
+            if (response.didCancel) {
+                console.log('User cancelled image picker');
+              } else if (response.error) {
+                console.log('ImagePicker Error: ', response.error);
+              } else {
+                this.sendFile(response.uri);
+              }
+        });
+      }
+
+      sendFile = (img) =>{
+          var img = img;
+          console.log(img);
+          Image.getSize(img, (width, height) => {
+              console.log("Image wid: ",width)
+              console.log("Image hei: ",height)
+            RNFetchBlob.fs.readFile(img, 'base64')
+            .then((data) => {
+                var data = "data:image/jpeg;base64,"+data;
+                this.setState({view:'upload',format:'upload',photoData:data,photoSizes:{ width:width*2,height:height*2}});
+                //console.log(data.uri);
+            });
+          }, (error) => {
+            
+          });
+      }
     
       takePicture = async () => {
         if (this.camera) {
           const options = { quality: 1, base64: true };
           const data = await this.camera.takePictureAsync(options)
+          var widthD = data.width;
+          var heightD = data.height;
           RNFetchBlob.fs.readFile(data.uri, 'base64')
             .then((data) => {
                 var data = "data:image/jpeg;base64,"+data;
-                this.setState({view:'image',photoData:data});
-                console.log(data.uri);
+                this.setState({view:'image',format:'upload',photoData:data,photoSizes:{ width:widthD,height:heightD}});
+                //console.log(data.uri);
             });
           
           //this.mountCanvas();
@@ -320,8 +516,16 @@ const styles = StyleSheet.create({
         flex:1,
         flexGrow: 1,
         justifyContent: 'flex-end',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         resizeMode: 'stretch',
+        zIndex:0
+    },
+    imageUpload:{
+        flex:1,
+        flexGrow: 1,
+        justifyContent: 'flex-end',
+        alignItems: 'flex-start',
+        resizeMode: 'contain',
         zIndex:0
     },
     imagetest:{
@@ -334,13 +538,27 @@ const styles = StyleSheet.create({
         height:32,
         backgroundColor:'red'
     },
+    removeButton:{
+        width:15,
+        height:15,
+        backgroundColor:'red',
+        justifyContent:'center',
+        margin:10
+    },
+    addButton:{
+        width:15,
+        height:15,
+        backgroundColor:'green',
+        justifyContent:'center',
+        margin:10
+    },
     container: {
-      flex: 0,
-      flexDirection: 'column',
-      backgroundColor: 'black',
-      borderWidth:1,
-      width:'100%',
-      flexGrow: 1,
+        flex: 0,
+        flexDirection: 'column',
+        backgroundColor: 'black',
+        borderWidth:1,
+        width:'100%',
+        flexGrow: 1,
     },
     preview: {
       flex: 1,

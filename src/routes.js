@@ -4,14 +4,14 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer } from '@react-navigation/native';
 
 import Main from './pages/main';
-import Overlay from './pages/overlay';
+import Diagnostic from './pages/diagnostic';
 
 function HomeScreen({ navigation }) {
     return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flex: 0, alignItems: 'center', justifyContent: 'center' }}>
         <Button
             onPress={() => navigation.navigate('Diagnosticos')}
-            title="Go to notifications"
+            title="Diagnostics"
         />
         </View>
     );
@@ -19,7 +19,7 @@ function HomeScreen({ navigation }) {
 
 function NotificationsScreen({ navigation }) {
     return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', width:'100%' }}>
+        <View style={{ flex: 0, alignItems: 'center', justifyContent: 'center', width:'100%' }}>
         <Button onPress={() => navigation.goBack()} title="Go back home" />
         </View>
     );
@@ -32,7 +32,7 @@ export default function Routes() {
     <NavigationContainer>
       <Drawer.Navigator initialRouteName="Main">
         <Drawer.Screen name="Main" component={Main} />
-        <Drawer.Screen name="Diagnosticos" component={Overlay} />
+        <Drawer.Screen name="Diagnósticos" component={Diagnostic} />
       </Drawer.Navigator>
     </NavigationContainer>
   );
