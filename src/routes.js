@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 
 import Main from './pages/main';
 import Diagnostic from './pages/diagnostic';
+console.disableYellowBox = true;
 
 function HomeScreen({ navigation }) {
     return (

@@ -53,6 +53,7 @@ export default class Main extends Component{
           },
           canvas: null,
           charCollection: [],
+          sounds : [],
           text:"Po",
           canvasB:{width: 32,
             height: 32},
@@ -171,6 +172,8 @@ export default class Main extends Component{
                 kanjiString = kanjiString+data.character;
                 var charCollection = this.state.charCollection;
                 charCollection.push(data.number);
+                var sounds = this.state.sounds;
+                sounds.push(data.sound);
                 console.log(charCollection);
                 this.setState({kanjiString:kanjiString, charCollection:charCollection});
                 translate(kanjiString, {
@@ -197,6 +200,8 @@ export default class Main extends Component{
         kanjiString = kanjiString.substring(0,kanjiString.length-1);
         var charCollection = this.state.charCollection;
         charCollection.pop();
+        var sounds = this.state.sounds;
+        sounds.pop();
         this.setState({kanjiString:kanjiString, charCollection:charCollection});
     }
 
@@ -285,7 +290,7 @@ export default class Main extends Component{
         }else{
             resizeWidth = (this.state.photoSizes.width/this.state.imageSizes.width)*1.5;
             resizeHeight = (this.state.photoSizes.height/this.state.imageSizes.height);
-            xDelay = 67;
+            xDelay = 68.4;
         }
         console.log("Resize: ",resizeWidth);
         console.log("Resize: ",resizeHeight);
@@ -326,6 +331,10 @@ export default class Main extends Component{
     }
     
     render() {
+        var soundsString = "";
+        for(var i=0;i<this.state.sounds.length;i++){
+            soundsString = soundsString+this.state.sounds[i]+" ";
+        }
         if(this.state.view=='start'){
             if(this.state.image!=null){
                 var imageCanvas = this.state.image;
@@ -335,8 +344,8 @@ export default class Main extends Component{
             }
             return(
                 <View>
-                    <Button onPress={() =>this.openCamera()}
-                            title="Usar Câmera"/>
+                    {/*<Button onPress={() =>this.openCamera()}
+                            title="Usar Câmera"/>*/}
                     <Button onPress={() =>this.chooseFile()}
                             title="Enviar Arquivo"/>
                 </View>
@@ -392,7 +401,7 @@ export default class Main extends Component{
                         />
                         </TouchableHighlight>
                         </Gestures>
-                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',}}>
+                        <View style={{width:'100%',height:120,backgroundColor:"white",justifyContent: 'flex-start',}}>
                             <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} />
                             <Text style={{width:'100%',height:100,backgroundColor:'red'}}>{this.state.kanjiString}</Text>
                         </View>
@@ -426,9 +435,10 @@ export default class Main extends Component{
                         />
                         </TouchableHighlight>
                         </Gestures>
-                        <View style={{width:'100%',height:100,backgroundColor:"white",justifyContent: 'flex-start',flexDirection: 'column',}}>
+                        <View style={{width:'100%',height:120,backgroundColor:"white",justifyContent: 'flex-start',flexDirection: 'column',}}>
                             <Canvas style={styles.canvas} ref={canvasB => this.state.canvasB = canvasB} />
                             <Text style={{width:'100%'}}>{this.state.kanjiString}</Text>
+                            <Text style={{width:'100%'}}>{soundsString}</Text>
                             <Text style={{width:'100%'}}>{this.state.translation}</Text>
                             <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center' }}>
                                 <TouchableOpacity onPress={() => this.removeLast()} style={styles.removeButton}>
